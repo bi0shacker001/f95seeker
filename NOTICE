@@ -1,0 +1,8 @@
+f95seeker includes logic adapted from F95Checker:
+https://github.com/WillyJL/F95Checker
+
+Upstream revision inspected: a10c22857938c1379c3a3eeaa208c6f5e11c75e3 (2026-07-25)
+Copyright belongs to the F95Checker contributors.
+Licensed under GNU GPL version 3.
+
+This project is not affiliated with F95zone or F95Checker.
