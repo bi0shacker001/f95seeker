@@ -19,14 +19,16 @@ enum SearchField {
 }
 
 class GameSummary {
-  const GameSummary({required this.id, required this.title, required this.creator});
+  const GameSummary(
+      {required this.id, required this.title, required this.creator});
 
   final int id;
   final String title;
   final String creator;
   String get threadUrl => 'https://f95zone.to/threads/$id';
 
-  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'creator': creator};
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'title': title, 'creator': creator};
   factory GameSummary.fromJson(Map<String, dynamic> json) => GameSummary(
         id: (json['id'] as num).toInt(),
         title: json['title'] as String? ?? '',
@@ -35,7 +37,11 @@ class GameSummary {
 }
 
 class SearchRecord {
-  const SearchRecord({required this.query, required this.category, required this.field, required this.timestamp});
+  const SearchRecord(
+      {required this.query,
+      required this.category,
+      required this.field,
+      required this.timestamp});
   final String query;
   final SearchCategory category;
   final SearchField field;
@@ -49,9 +55,11 @@ class SearchRecord {
       };
   factory SearchRecord.fromJson(Map<String, dynamic> json) => SearchRecord(
         query: json['query'] as String? ?? '',
-        category: SearchCategory.values.byName(json['category'] as String? ?? 'games'),
+        category: SearchCategory.values
+            .byName(json['category'] as String? ?? 'games'),
         field: SearchField.values.byName(json['field'] as String? ?? 'title'),
-        timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+        timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+            DateTime.now(),
       );
 }
 

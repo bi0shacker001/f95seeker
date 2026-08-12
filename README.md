@@ -10,10 +10,13 @@ Please do report issues you find. This is a semi-personal application, so follow
 - Search categories and fields matching F95Checker: Games, Comics, Animations, and Assets; searchable by Title or Creator.
 - Local search history, capped at the 50 most recent distinct searches.
 - Favorites, presented as "Saved games," stored locally on the device.
+- An F95Checker-inspired tabbed detail view for Overview, Changelog, Downloads, and Info.
+- System, light, and dark appearance modes with five selectable accent themes.
+- An optional signed-in F95zone WebView session for protected forum and download links. Credentials are entered only on F95zone's own login page and cookies remain in Android's WebView storage.
 - Thread details from the F95Checker cache backend: version, developer, status, rating, tags, artwork, overview, changelog, and available links.
 - All forum and download links open in the external browser. Protected/XPath links open the original forum thread so the user's signed-in browser can resolve them.
 
-The app does not store F95zone credentials or cookies. It has no game library manager, update checker, launcher, downloader, or background service.
+The app does not receive or store F95zone passwords. It has no game launcher, automatic updater, or background service.
 
 ## Creating the platform runner
 

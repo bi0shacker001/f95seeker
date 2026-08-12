@@ -1,7 +1,7 @@
 name: f95seeker
 description: A search-only F95 feed checker and download helper for Android gaming handhelds.
 publish_to: none
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ">=3.6.0 <4.0.0"
@@ -12,6 +12,7 @@ dependencies:
   http: ^1.4.0
   shared_preferences: ^2.5.3
   url_launcher: ^6.3.2
+  webview_flutter: ^4.14.1
 
 dev_dependencies:
   flutter_test:

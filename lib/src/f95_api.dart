@@ -9,10 +9,39 @@ class F95Api {
   final http.Client _client;
 
   static const _stopWords = {
-    'a', 'is', 'the', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by',
-    'for', 'if', 'in', 'into', 'it', 'no', 'not', 'of', 'on', 'or', 'such',
-    'that', 'their', 'then', 'there', 'these', 'they', 'this', 'to', 'was',
-    'will', 'with',
+    'a',
+    'is',
+    'the',
+    'an',
+    'and',
+    'are',
+    'as',
+    'at',
+    'be',
+    'but',
+    'by',
+    'for',
+    'if',
+    'in',
+    'into',
+    'it',
+    'no',
+    'not',
+    'of',
+    'on',
+    'or',
+    'such',
+    'that',
+    'their',
+    'then',
+    'there',
+    'these',
+    'they',
+    'this',
+    'to',
+    'was',
+    'will',
+    'with',
   };
 
   /// Adapted from F95Checker's latest_updates_search_sanitize_query.
@@ -22,8 +51,8 @@ class F95Api {
         .replaceAll(RegExp(r"[?&/':;.\-+!~(),*]+"), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
-    final words = normalized.split(' ').where((word) =>
-        word.isNotEmpty && !_stopWords.contains(word.toLowerCase()));
+    final words = normalized.split(' ').where(
+        (word) => word.isNotEmpty && !_stopWords.contains(word.toLowerCase()));
     var result = '';
     for (final word in words) {
       final addition = '${result.isEmpty ? '' : ' '}$word';
@@ -41,7 +70,9 @@ class F95Api {
     required SearchField field,
   }) async {
     final clean = sanitizeQuery(query);
-    if (clean.isEmpty) throw const FormatException('Try a more specific search.');
+    if (clean.isEmpty) {
+      throw const FormatException('Try a more specific search.');
+    }
     final uri = Uri.https('f95zone.to', '/sam/latest_alpha/latest_data.php', {
       'cmd': 'list',
       'cat': category.apiValue,
@@ -54,31 +85,47 @@ class F95Api {
     final root = await _getObject(uri);
     _throwApiError(root);
     final data = ((root['msg'] as Map?)?['data'] as List?) ?? const [];
-    return data.whereType<Map>().map((item) => GameSummary(
-      id: (item['thread_id'] as num).toInt(),
-      title: item['title'] as String? ?? '',
-      creator: item['creator'] as String? ?? '',
-    )).toList();
+    return data
+        .whereType<Map>()
+        .map((item) => GameSummary(
+              id: (item['thread_id'] as num).toInt(),
+              title: item['title'] as String? ?? '',
+              creator: item['creator'] as String? ?? '',
+            ))
+        .toList();
   }
 
   Future<GameDetail> detail(GameSummary summary) async {
-    final root = await _getObject(Uri.parse('https://api.f95checker.dev/full/${summary.id}?ts=0'));
+    final root = await _getObject(
+        Uri.parse('https://api.f95checker.dev/full/${summary.id}?ts=0'));
     _throwApiError(root);
     final tags = _decodeList(root['tags']).map((e) => e.toString()).toList();
     final downloads = _decodeList(root['downloads']).map((section) {
       final values = section as List;
-      final mirrors = (values.length > 1 ? values[1] as List : const []).map((mirror) {
+      final mirrors =
+          (values.length > 1 ? values[1] as List : const []).map((mirror) {
         final pair = mirror as List;
-        return DownloadMirror(pair.firstOrNull?.toString() ?? 'Open', pair.elementAtOrNull(1)?.toString() ?? '');
+        return DownloadMirror(pair.firstOrNull?.toString() ?? 'Open',
+            pair.elementAtOrNull(1)?.toString() ?? '');
       }).toList();
-      return DownloadSection(values.firstOrNull?.toString() ?? 'Downloads', mirrors);
+      return DownloadSection(
+          values.firstOrNull?.toString() ?? 'Downloads', mirrors);
     }).toList();
     final image = root['image_url']?.toString();
     return GameDetail(
-      summary: GameSummary(id: summary.id, title: _text(root, 'name', fallback: summary.title), creator: _text(root, 'developer', fallback: summary.creator)),
+      summary: GameSummary(
+          id: summary.id,
+          title: _text(root, 'name', fallback: summary.title),
+          creator: _text(root, 'developer', fallback: summary.creator)),
       version: _text(root, 'version', fallback: 'N/A'),
       developer: _text(root, 'developer', fallback: summary.creator),
-      status: const {'1': 'Normal', '2': 'Completed', '3': 'On hold', '4': 'Abandoned'}[root['status']?.toString()] ?? 'Unknown',
+      status: const {
+            '1': 'Normal',
+            '2': 'Completed',
+            '3': 'On hold',
+            '4': 'Abandoned'
+          }[root['status']?.toString()] ??
+          'Unknown',
       description: _text(root, 'description'),
       changelog: _text(root, 'changelog'),
       tags: tags,
@@ -90,7 +137,8 @@ class F95Api {
   }
 
   Future<Map<String, dynamic>> _getObject(Uri uri) async {
-    final response = await _client.get(uri, headers: {'User-Agent': 'f95seeker/0.1 Android'});
+    final response = await _client
+        .get(uri, headers: {'User-Agent': 'f95seeker/0.1 Android'});
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Request failed (${response.statusCode}).');
     }
@@ -99,7 +147,8 @@ class F95Api {
 
   void _throwApiError(Map<String, dynamic> root) {
     if (root['status']?.toString().toLowerCase() == 'error') {
-      throw Exception(root['msg']?.toString() ?? 'The service returned an error.');
+      throw Exception(
+          root['msg']?.toString() ?? 'The service returned an error.');
     }
   }
 
@@ -117,5 +166,6 @@ class F95Api {
 
 extension _SafeListAccess<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
-  T? elementAtOrNull(int index) => index < 0 || index >= length ? null : this[index];
+  T? elementAtOrNull(int index) =>
+      index < 0 || index >= length ? null : this[index];
 }
