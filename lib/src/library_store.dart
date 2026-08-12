@@ -14,7 +14,7 @@ class LibraryStore extends ChangeNotifier {
   final List<SearchRecord> history = [];
   SharedPreferences? _preferences;
   ThemeModePreference themeMode = ThemeModePreference.system;
-  ThemeColor themeColor = ThemeColor.crimson;
+  ThemeColor themeColor = ThemeColor.lavender;
 
   Future<void> load() async {
     _preferences = await SharedPreferences.getInstance();
@@ -29,7 +29,7 @@ class LibraryStore extends ChangeNotifier {
     themeMode = ThemeModePreference.values
         .byName(_preferences!.getString(_themeKey) ?? 'system');
     themeColor = ThemeColor.values
-        .byName(_preferences!.getString(_colorKey) ?? 'crimson');
+        .byName(_preferences!.getString(_colorKey) ?? 'lavender');
     notifyListeners();
   }
 
@@ -97,4 +97,4 @@ class LibraryStore extends ChangeNotifier {
 
 enum ThemeModePreference { system, light, dark }
 
-enum ThemeColor { crimson, violet, blue, green, amber }
+enum ThemeColor { lavender, crimson, violet, blue, green, amber }

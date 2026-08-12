@@ -25,6 +25,7 @@ class _F95FeedAppState extends State<F95FeedApp> {
         listenable: store,
         builder: (context, _) {
           final seed = switch (store.themeColor) {
+            ThemeColor.lavender => const Color(0xffB89BFF),
             ThemeColor.crimson => const Color(0xff913535),
             ThemeColor.violet => const Color(0xff6f43a5),
             ThemeColor.blue => const Color(0xff3168a8),
@@ -551,6 +552,15 @@ class SettingsPage extends StatelessWidget {
             leading: const Icon(Icons.delete_sweep_outlined),
             title: const Text('Clear search history'),
             onTap: store.clearHistory),
+        const SizedBox(height: 24),
+        Text('About', style: Theme.of(context).textTheme.titleLarge),
+        const ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(Icons.info_outline),
+          title: Text('Unofficial community project'),
+          subtitle: Text(
+              'f95seeker is not affiliated with, endorsed by, or sponsored by F95zone or F95Checker. All credit for the original backend and infrastructure goes to F95Checker.'),
+        ),
       ]);
 }
 

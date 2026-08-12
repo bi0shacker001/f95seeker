@@ -38,8 +38,19 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Restore release signing key
+        shell: bash
+        run: echo "$F95SEEKER_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/f95seeker-release.p12"
+        env:
+          F95SEEKER_KEYSTORE_BASE64: ${{ secrets.F95SEEKER_KEYSTORE_BASE64 }}
+
       - name: Build APK
         run: flutter build apk --release
+        env:
+          F95SEEKER_KEYSTORE: ${{ runner.temp }}/f95seeker-release.p12
+          F95SEEKER_STORE_PASSWORD: ${{ secrets.F95SEEKER_STORE_PASSWORD }}
+          F95SEEKER_KEY_ALIAS: f95seeker
+          F95SEEKER_KEY_PASSWORD: ${{ secrets.F95SEEKER_KEY_PASSWORD }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
