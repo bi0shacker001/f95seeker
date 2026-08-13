@@ -7,24 +7,18 @@ import 'library_store.dart';
 import 'models.dart';
 
 class F95FeedApp extends StatefulWidget {
-  const F95FeedApp({super.key});
+  const F95FeedApp({required this.store, super.key});
+  final LibraryStore store;
   @override
   State<F95FeedApp> createState() => _F95FeedAppState();
 }
 
 class _F95FeedAppState extends State<F95FeedApp> {
-  final store = LibraryStore();
-  @override
-  void initState() {
-    super.initState();
-    store.load();
-  }
-
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: store,
+        listenable: widget.store,
         builder: (context, _) {
-          final seed = switch (store.themeColor) {
+          final seed = switch (widget.store.themeColor) {
             ThemeColor.lavender => const Color(0xffB89BFF),
             ThemeColor.crimson => const Color(0xff913535),
             ThemeColor.violet => const Color(0xff6f43a5),
@@ -32,7 +26,7 @@ class _F95FeedAppState extends State<F95FeedApp> {
             ThemeColor.green => const Color(0xff357a55),
             ThemeColor.amber => const Color(0xff9a6415),
           };
-          final mode = switch (store.themeMode) {
+          final mode = switch (widget.store.themeMode) {
             ThemeModePreference.system => ThemeMode.system,
             ThemeModePreference.light => ThemeMode.light,
             ThemeModePreference.dark => ThemeMode.dark,
@@ -48,7 +42,7 @@ class _F95FeedAppState extends State<F95FeedApp> {
                 colorScheme: ColorScheme.fromSeed(
                     seedColor: seed, brightness: Brightness.dark),
                 useMaterial3: true),
-            home: HomePage(store: store),
+            home: HomePage(store: widget.store),
           );
         },
       );
@@ -234,19 +228,25 @@ class _SearchPageState extends State<SearchPage> {
                             icon: Icon(widget.store.isFavorite(game.id)
                                 ? Icons.favorite
                                 : Icons.favorite_border)),
-                        onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => DetailPage(
-                                    summary: game, store: widget.store))),
+                        onTap: () async {
+                          await widget.store.addRecentGame(game);
+                          if (context.mounted) {
+                            Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => DetailPage(
+                                        summary: game, store: widget.store)));
+                          }
+                        },
                       ));
                     },
                   )),
       ]);
 }
 
-class HistoryPage extends StatelessWidget {
-  const HistoryPage({required this.store, required this.onSelect, super.key});
+class LegacyHistoryPage extends StatelessWidget {
+  const LegacyHistoryPage(
+      {required this.store, required this.onSelect, super.key});
   final LibraryStore store;
   final ValueChanged<SearchRecord> onSelect;
   @override
@@ -275,6 +275,65 @@ class HistoryPage extends StatelessWidget {
       ]);
 }
 
+class HistoryPage extends StatelessWidget {
+  const HistoryPage({required this.store, required this.onSelect, super.key});
+  final LibraryStore store;
+  final ValueChanged<SearchRecord> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    if (store.recentGames.isEmpty && store.history.isEmpty) {
+      return const Center(child: Text('No activity yet.'));
+    }
+    return ListView(children: [
+      if (store.recentGames.isNotEmpty) ...[
+        _HistoryHeader(
+            title: 'Recently opened', onClear: store.clearRecentGames),
+        ...store.recentGames.map((game) => ListTile(
+              leading: const Icon(Icons.sports_esports_outlined),
+              title: Text(game.title),
+              subtitle: Text(
+                  game.creator.isEmpty ? 'Thread ${game.id}' : game.creator),
+              onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => DetailPage(summary: game, store: store))),
+            )),
+      ],
+      if (store.history.isNotEmpty) ...[
+        _HistoryHeader(title: 'Searches', onClear: store.clearHistory),
+        ...store.history.map((item) => ListTile(
+              leading: const Icon(Icons.history),
+              title: Text(item.query),
+              subtitle: Text('${item.category.label} · ${item.field.label}'),
+              onTap: () => onSelect(item),
+            )),
+      ],
+      const SizedBox(height: 16),
+    ]);
+  }
+}
+
+class _HistoryHeader extends StatelessWidget {
+  const _HistoryHeader({required this.title, required this.onClear});
+  final String title;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+        child: Row(children: [
+          Expanded(
+              child:
+                  Text(title, style: Theme.of(context).textTheme.titleMedium)),
+          TextButton.icon(
+              onPressed: onClear,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Clear')),
+        ]),
+      );
+}
+
 class SavedPage extends StatelessWidget {
   const SavedPage({required this.store, super.key});
   final LibraryStore store;
@@ -293,11 +352,16 @@ class SavedPage extends StatelessWidget {
                     trailing: IconButton(
                         onPressed: () => store.toggleFavorite(game),
                         icon: const Icon(Icons.favorite)),
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                DetailPage(summary: game, store: store)))));
+                    onTap: () async {
+                      await store.addRecentGame(game);
+                      if (context.mounted) {
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    DetailPage(summary: game, store: store)));
+                      }
+                    }));
           },
         );
 }

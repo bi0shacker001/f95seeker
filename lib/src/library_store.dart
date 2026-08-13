@@ -8,10 +8,12 @@ import 'models.dart';
 class LibraryStore extends ChangeNotifier {
   static const _favoritesKey = 'saved_games_v1';
   static const _historyKey = 'search_history_v1';
+  static const _recentGamesKey = 'recent_games_v1';
   static const _themeKey = 'theme_mode_v1';
   static const _colorKey = 'theme_color_v1';
   final List<GameSummary> favorites = [];
   final List<SearchRecord> history = [];
+  final List<GameSummary> recentGames = [];
   SharedPreferences? _preferences;
   ThemeModePreference themeMode = ThemeModePreference.system;
   ThemeColor themeColor = ThemeColor.lavender;
@@ -26,10 +28,14 @@ class LibraryStore extends ChangeNotifier {
       ..clear()
       ..addAll(_decode(_preferences!.getString(_historyKey))
           .map(SearchRecord.fromJson));
-    themeMode = ThemeModePreference.values
-        .byName(_preferences!.getString(_themeKey) ?? 'system');
-    themeColor = ThemeColor.values
-        .byName(_preferences!.getString(_colorKey) ?? 'lavender');
+    recentGames
+      ..clear()
+      ..addAll(_decode(_preferences!.getString(_recentGamesKey))
+          .map(GameSummary.fromJson));
+    themeMode = _enumValue(ThemeModePreference.values,
+        _preferences!.getString(_themeKey), ThemeModePreference.system);
+    themeColor = _enumValue(ThemeColor.values,
+        _preferences!.getString(_colorKey), ThemeColor.lavender);
     notifyListeners();
   }
 
@@ -42,8 +48,25 @@ class LibraryStore extends ChangeNotifier {
     } else {
       favorites.removeAt(index);
     }
-    await _preferences?.setString(
+    await _preferences!.setString(
         _favoritesKey, jsonEncode(favorites.map((e) => e.toJson()).toList()));
+    notifyListeners();
+  }
+
+  Future<void> addRecentGame(GameSummary game) async {
+    recentGames.removeWhere((item) => item.id == game.id);
+    recentGames.insert(0, game);
+    if (recentGames.length > 50) {
+      recentGames.removeRange(50, recentGames.length);
+    }
+    await _preferences!.setString(_recentGamesKey,
+        jsonEncode(recentGames.map((e) => e.toJson()).toList()));
+    notifyListeners();
+  }
+
+  Future<void> clearRecentGames() async {
+    recentGames.clear();
+    await _preferences!.remove(_recentGamesKey);
     notifyListeners();
   }
 
@@ -73,26 +96,35 @@ class LibraryStore extends ChangeNotifier {
 
   Future<void> setThemeMode(ThemeModePreference value) async {
     themeMode = value;
-    await _preferences?.setString(_themeKey, value.name);
+    await _preferences!.setString(_themeKey, value.name);
     notifyListeners();
   }
 
   Future<void> setThemeColor(ThemeColor value) async {
     themeColor = value;
-    await _preferences?.setString(_colorKey, value.name);
+    await _preferences!.setString(_colorKey, value.name);
     notifyListeners();
   }
 
-  Future<void> _saveHistory() async => _preferences?.setString(
+  Future<void> _saveHistory() async => _preferences!.setString(
       _historyKey, jsonEncode(history.map((e) => e.toJson()).toList()));
 
   List<Map<String, dynamic>> _decode(String? value) {
     if (value == null || value.isEmpty) return const [];
-    return (jsonDecode(value) as List)
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+    try {
+      return (jsonDecode(value) as List)
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } on FormatException {
+      return const [];
+    } on TypeError {
+      return const [];
+    }
   }
+
+  T _enumValue<T extends Enum>(List<T> values, String? name, T fallback) =>
+      values.where((value) => value.name == name).firstOrNull ?? fallback;
 }
 
 enum ThemeModePreference { system, light, dark }

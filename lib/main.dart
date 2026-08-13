@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'src/app.dart';
+import 'src/library_store.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const F95FeedApp());
+  final store = LibraryStore();
+  await store.load();
+  runApp(F95FeedApp(store: store));
 }
