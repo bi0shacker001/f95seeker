@@ -162,6 +162,16 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
+  Future<void> openThread(GameSummary game) async {
+    await widget.store.addRecentGame(game);
+    final opened = await launchUrl(Uri.parse(game.threadUrl),
+        mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the forum thread.')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Column(children: [
         Padding(
@@ -223,11 +233,20 @@ class _SearchPageState extends State<SearchPage> {
                             ? 'Thread ${game.id}'
                             : '${game.creator}\nThread ${game.id}'),
                         isThreeLine: game.creator.isNotEmpty,
-                        trailing: IconButton(
-                            onPressed: () => widget.store.toggleFavorite(game),
-                            icon: Icon(widget.store.isFavorite(game.id)
-                                ? Icons.favorite
-                                : Icons.favorite_border)),
+                        trailing:
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                          IconButton(
+                              tooltip: 'Save game',
+                              onPressed: () =>
+                                  widget.store.toggleFavorite(game),
+                              icon: Icon(widget.store.isFavorite(game.id)
+                                  ? Icons.favorite
+                                  : Icons.favorite_border)),
+                          IconButton(
+                              tooltip: 'Open thread',
+                              onPressed: () => openThread(game),
+                              icon: const Icon(Icons.open_in_new)),
+                        ]),
                         onTap: () async {
                           await widget.store.addRecentGame(game);
                           if (context.mounted) {
