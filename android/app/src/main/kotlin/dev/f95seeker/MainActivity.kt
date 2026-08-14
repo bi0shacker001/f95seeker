@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -17,19 +16,20 @@ import java.security.MessageDigest
 
 class MainActivity : FlutterActivity() {
     private val channelName = "dev.f95seeker/apk_installer"
+    private val apkPickerRequest = 9501
     private var pendingResult: MethodChannel.Result? = null
     private var selectedApk: File? = null
     private var pendingInstall = false
 
-    private val apkPicker = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { response ->
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != apkPickerRequest) return
         val result = pendingResult
         pendingResult = null
-        val uri = response.data?.data
-        if (response.resultCode != RESULT_OK || uri == null) {
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) {
             result?.success(null)
-            return@registerForActivityResult
+            return
         }
         try {
             val target = File(cacheDir, "selected-package.apk")
@@ -58,10 +58,10 @@ class MainActivity : FlutterActivity() {
                     return
                 }
                 pendingResult = result
-                apkPicker.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
                     type = "application/vnd.android.package-archive"
-                })
+                }, apkPickerRequest)
             }
             "installSelectedApk" -> {
                 val apk = selectedApk
