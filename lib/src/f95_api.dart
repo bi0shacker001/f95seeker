@@ -1,12 +1,17 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
 
 class F95Api {
   F95Api({http.Client? client}) : _client = client ?? http.Client();
   final http.Client _client;
+  static const _cachePrefix = 'f95_cache_v1_';
+  static const _searchTtl = Duration(minutes: 30);
+  static const _detailTtl = Duration(hours: 12);
+  static final Map<String, Future<Map<String, dynamic>>> _inFlight = {};
 
   static const _stopWords = {
     'a',
@@ -82,7 +87,10 @@ class F95Api {
       'rows': '30',
       '_': DateTime.now().millisecondsSinceEpoch.toString(),
     });
-    final root = await _getObject(uri);
+    final cacheKey =
+        'search:${category.name}:${field.name}:${clean.toLowerCase()}';
+    final root =
+        await _cachedObject(cacheKey, _searchTtl, () => _getObject(uri));
     _throwApiError(root);
     final data = ((root['msg'] as Map?)?['data'] as List?) ?? const [];
     return data
@@ -96,8 +104,11 @@ class F95Api {
   }
 
   Future<GameDetail> detail(GameSummary summary) async {
-    final root = await _getObject(
-        Uri.parse('https://api.f95checker.dev/full/${summary.id}?ts=0'));
+    final root = await _cachedObject(
+        'detail:${summary.id}',
+        _detailTtl,
+        () => _getObject(
+            Uri.parse('https://api.f95checker.dev/full/${summary.id}?ts=0')));
     _throwApiError(root);
     final tags = _decodeList(root['tags']).map((e) => e.toString()).toList();
     final downloads = _decodeList(root['downloads']).map((section) {
@@ -145,6 +156,56 @@ class F95Api {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> _cachedObject(String key, Duration ttl,
+      Future<Map<String, dynamic>> Function() loader) async {
+    final encodedKey = base64Url.encode(utf8.encode(key));
+    final storageKey = '$_cachePrefix$encodedKey';
+    final preferences = await SharedPreferences.getInstance();
+    final cached = _decodeCache(preferences.getString(storageKey));
+    if (cached != null && DateTime.now().difference(cached.savedAt) < ttl) {
+      return cached.data;
+    }
+
+    final existing = _inFlight[storageKey];
+    if (existing != null) return existing;
+    final request = loader().then((data) async {
+      await preferences.setString(
+          storageKey,
+          jsonEncode({
+            'savedAt': DateTime.now().toIso8601String(),
+            'data': data,
+          }));
+      return data;
+    }).catchError((Object error) {
+      if (cached != null) return cached.data;
+      throw error;
+    }).whenComplete(() {
+      _inFlight.remove(storageKey);
+    });
+    _inFlight[storageKey] = request;
+    return request;
+  }
+
+  static Future<void> clearCache() async {
+    final preferences = await SharedPreferences.getInstance();
+    await Future.wait(preferences
+        .getKeys()
+        .where((key) => key.startsWith(_cachePrefix))
+        .map(preferences.remove));
+  }
+
+  _CachedObject? _decodeCache(String? value) {
+    if (value == null) return null;
+    try {
+      final root = jsonDecode(value) as Map<String, dynamic>;
+      final savedAt = DateTime.parse(root['savedAt'] as String);
+      final data = Map<String, dynamic>.from(root['data'] as Map);
+      return _CachedObject(savedAt, data);
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _throwApiError(Map<String, dynamic> root) {
     if (root['status']?.toString().toLowerCase() == 'error') {
       throw Exception(
@@ -162,6 +223,12 @@ class F95Api {
     final value = root[key]?.toString() ?? '';
     return value.isEmpty ? fallback : value;
   }
+}
+
+class _CachedObject {
+  const _CachedObject(this.savedAt, this.data);
+  final DateTime savedAt;
+  final Map<String, dynamic> data;
 }
 
 extension _SafeListAccess<T> on List<T> {

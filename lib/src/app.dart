@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -630,11 +631,25 @@ class SettingsPage extends StatelessWidget {
             label: const Text('Clear forum session')),
         const SizedBox(height: 24),
         Text('Storage', style: Theme.of(context).textTheme.titleLarge),
+        const _ApkInstallerTile(),
         ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.delete_sweep_outlined),
             title: const Text('Clear search history'),
             onTap: store.clearHistory),
+        ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.cached_outlined),
+            title: const Text('Clear cached forum data'),
+            subtitle: const Text(
+                'Searches are cached for 30 minutes and game details for 12 hours.'),
+            onTap: () async {
+              await F95Api.clearCache();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Cached forum data cleared.')));
+              }
+            }),
         const SizedBox(height: 24),
         Text('About', style: Theme.of(context).textTheme.titleLarge),
         const ListTile(
@@ -645,6 +660,98 @@ class SettingsPage extends StatelessWidget {
               'f95seeker is not affiliated with, endorsed by, or sponsored by F95zone or F95Checker. All credit for the original backend and infrastructure goes to F95Checker.'),
         ),
       ]);
+}
+
+class _ApkInstallerTile extends StatefulWidget {
+  const _ApkInstallerTile();
+
+  @override
+  State<_ApkInstallerTile> createState() => _ApkInstallerTileState();
+}
+
+class _ApkInstallerTileState extends State<_ApkInstallerTile> {
+  static const channel = MethodChannel('dev.f95seeker/apk_installer');
+  bool busy = false;
+
+  Future<void> selectApk() async {
+    setState(() => busy = true);
+    try {
+      final raw = await channel.invokeMapMethod<String, dynamic>('pickApk');
+      if (raw == null || !mounted) return;
+      final installed = raw['installed'] == true;
+      final mismatch = raw['certificateMatches'] == false;
+      final action = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title:
+              Text(installed ? 'Update Android app?' : 'Install Android app?'),
+          content: SingleChildScrollView(
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(raw['label']?.toString() ?? 'Selected APK',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text('Package: ${raw['packageName']}'),
+                Text('APK version: ${raw['versionName']} '
+                    '(${raw['versionCode']})'),
+                if (installed)
+                  Text('Installed version: ${raw['installedVersionName']} '
+                      '(${raw['installedVersionCode']})'),
+                if (mismatch) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'The certificates do not match. Android will likely reject '
+                    'this update. You may need to uninstall the installed '
+                    'version first, which can erase its app data.',
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                const Text(
+                    'This APK is provided by a third party. f95seeker does not '
+                    'verify its safety or authenticity. Review its source and '
+                    'permissions before installing.'),
+              ])),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child:
+                    Text(installed ? 'Continue update' : 'Continue install')),
+          ],
+        ),
+      );
+      if (action == true) {
+        await channel.invokeMethod<bool>('installSelectedApk');
+      }
+    } on PlatformException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(error.message ?? 'The APK could not be opened.')));
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.install_mobile_outlined),
+        title: const Text('Install downloaded APK'),
+        subtitle: const Text(
+            'Inspect an Android build, then open Android’s system installer.'),
+        trailing: busy
+            ? const SizedBox(
+                width: 24, height: 24, child: CircularProgressIndicator())
+            : const Icon(Icons.chevron_right),
+        onTap: busy ? null : selectApk,
+      );
 }
 
 class ForumBrowserPage extends StatefulWidget {
