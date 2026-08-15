@@ -7,6 +7,8 @@ import 'f95_api.dart';
 import 'library_store.dart';
 import 'models.dart';
 
+const _apkInstallerChannel = MethodChannel('dev.f95seeker/apk_installer');
+
 class F95FeedApp extends StatefulWidget {
   const F95FeedApp({required this.store, super.key});
   final LibraryStore store;
@@ -15,6 +17,78 @@ class F95FeedApp extends StatefulWidget {
 }
 
 class _F95FeedAppState extends State<F95FeedApp> {
+  final navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _apkInstallerChannel.setMethodCallHandler((call) async {
+      final context = navigatorKey.currentContext;
+      if (call.method == 'apkDownloaded' && context != null) {
+        await _offerInstall(
+            context, Map<String, dynamic>.from(call.arguments as Map));
+      }
+    });
+  }
+
+  Future<void> _offerInstall(
+      BuildContext context, Map<String, dynamic> raw) async {
+    final installed = raw['installed'] == true;
+    final mismatch = raw['certificateMatches'] == false;
+    final action = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(installed ? 'Update Android app?' : 'Install Android app?'),
+        content: SingleChildScrollView(
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Text(raw['label']?.toString() ?? 'Downloaded APK',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text('Package: ${raw['packageName']}'),
+              Text(
+                  'APK version: ${raw['versionName']} (${raw['versionCode']})'),
+              if (installed)
+                Text('Installed version: ${raw['installedVersionName']} '
+                    '(${raw['installedVersionCode']})'),
+              if (mismatch) ...[
+                const SizedBox(height: 12),
+                Text(
+                    'The certificates do not match. Android will likely reject '
+                    'this update. You may need to uninstall the installed '
+                    'version first, which can erase its app data.',
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error)),
+              ],
+              const SizedBox(height: 12),
+              const Text(
+                  'This APK is provided by a third party. f95seeker does not '
+                  'verify its safety or authenticity. Review its source and '
+                  'permissions before installing.'),
+            ])),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Not now')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(installed ? 'Continue update' : 'Continue install')),
+        ],
+      ),
+    );
+    if (action == true) {
+      await _apkInstallerChannel.invokeMethod<bool>('installSelectedApk');
+    }
+  }
+
+  @override
+  void dispose() {
+    _apkInstallerChannel.setMethodCallHandler(null);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: widget.store,
@@ -33,6 +107,7 @@ class _F95FeedAppState extends State<F95FeedApp> {
             ThemeModePreference.dark => ThemeMode.dark,
           };
           return MaterialApp(
+            navigatorKey: navigatorKey,
             title: 'f95seeker',
             debugShowCheckedModeBanner: false,
             themeMode: mode,
@@ -403,6 +478,7 @@ class _DetailPageState extends State<DetailPage> {
                 initialUrl: widget.summary.threadUrl,
                 directUrl: target.startsWith('http') ? target : null,
                 xpath: target.startsWith('//') ? target : null,
+                offerApkInstalls: widget.store.offerApkInstalls,
               )));
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -631,7 +707,14 @@ class SettingsPage extends StatelessWidget {
             label: const Text('Clear forum session')),
         const SizedBox(height: 24),
         Text('Storage', style: Theme.of(context).textTheme.titleLarge),
-        const _ApkInstallerTile(),
+        SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.install_mobile_outlined),
+            title: const Text('Offer to install Android packages'),
+            subtitle: const Text(
+                'When an APK finishes downloading inside f95seeker, inspect it and offer to open Android’s installer.'),
+            value: store.offerApkInstalls,
+            onChanged: store.setOfferApkInstalls),
         ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.delete_sweep_outlined),
@@ -662,104 +745,17 @@ class SettingsPage extends StatelessWidget {
       ]);
 }
 
-class _ApkInstallerTile extends StatefulWidget {
-  const _ApkInstallerTile();
-
-  @override
-  State<_ApkInstallerTile> createState() => _ApkInstallerTileState();
-}
-
-class _ApkInstallerTileState extends State<_ApkInstallerTile> {
-  static const channel = MethodChannel('dev.f95seeker/apk_installer');
-  bool busy = false;
-
-  Future<void> selectApk() async {
-    setState(() => busy = true);
-    try {
-      final raw = await channel.invokeMapMethod<String, dynamic>('pickApk');
-      if (raw == null || !mounted) return;
-      final installed = raw['installed'] == true;
-      final mismatch = raw['certificateMatches'] == false;
-      final action = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title:
-              Text(installed ? 'Update Android app?' : 'Install Android app?'),
-          content: SingleChildScrollView(
-              child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(raw['label']?.toString() ?? 'Selected APK',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text('Package: ${raw['packageName']}'),
-                Text('APK version: ${raw['versionName']} '
-                    '(${raw['versionCode']})'),
-                if (installed)
-                  Text('Installed version: ${raw['installedVersionName']} '
-                      '(${raw['installedVersionCode']})'),
-                if (mismatch) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'The certificates do not match. Android will likely reject '
-                    'this update. You may need to uninstall the installed '
-                    'version first, which can erase its app data.',
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                const Text(
-                    'This APK is provided by a third party. f95seeker does not '
-                    'verify its safety or authenticity. Review its source and '
-                    'permissions before installing.'),
-              ])),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel')),
-            FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child:
-                    Text(installed ? 'Continue update' : 'Continue install')),
-          ],
-        ),
-      );
-      if (action == true) {
-        await channel.invokeMethod<bool>('installSelectedApk');
-      }
-    } on PlatformException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(error.message ?? 'The APK could not be opened.')));
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.install_mobile_outlined),
-        title: const Text('Install downloaded APK'),
-        subtitle: const Text(
-            'Inspect an Android build, then open Android’s system installer.'),
-        trailing: busy
-            ? const SizedBox(
-                width: 24, height: 24, child: CircularProgressIndicator())
-            : const Icon(Icons.chevron_right),
-        onTap: busy ? null : selectApk,
-      );
-}
-
 class ForumBrowserPage extends StatefulWidget {
   const ForumBrowserPage(
-      {required this.initialUrl, this.directUrl, this.xpath, super.key});
+      {required this.initialUrl,
+      this.directUrl,
+      this.xpath,
+      this.offerApkInstalls = false,
+      super.key});
   final String initialUrl;
   final String? directUrl;
   final String? xpath;
+  final bool offerApkInstalls;
   @override
   State<ForumBrowserPage> createState() => _ForumBrowserPageState();
 }
@@ -776,6 +772,26 @@ class _ForumBrowserPageState extends State<ForumBrowserPage> {
       ..setNavigationDelegate(NavigationDelegate(
         onProgress: (value) => setState(() => progress = value),
         onPageFinished: (_) => _resolveProtectedLink(),
+        onNavigationRequest: (request) async {
+          if (widget.offerApkInstalls &&
+              request.url.toLowerCase().contains('.apk')) {
+            try {
+              await _apkInstallerChannel
+                  .invokeMethod<int>('downloadApk', {'url': request.url});
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('APK download started.')));
+              }
+              return NavigationDecision.prevent;
+            } on PlatformException catch (error) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(error.message ?? 'Download failed.')));
+              }
+            }
+          }
+          return NavigationDecision.navigate;
+        },
       ))
       ..loadRequest(Uri.parse(widget.directUrl ?? widget.initialUrl));
   }

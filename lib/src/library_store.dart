@@ -11,12 +11,14 @@ class LibraryStore extends ChangeNotifier {
   static const _recentGamesKey = 'recent_games_v1';
   static const _themeKey = 'theme_mode_v1';
   static const _colorKey = 'theme_color_v1';
+  static const _offerApkInstallsKey = 'offer_apk_installs_v1';
   final List<GameSummary> favorites = [];
   final List<SearchRecord> history = [];
   final List<GameSummary> recentGames = [];
   SharedPreferences? _preferences;
   ThemeModePreference themeMode = ThemeModePreference.system;
   ThemeColor themeColor = ThemeColor.lavender;
+  bool offerApkInstalls = false;
 
   Future<void> load() async {
     _preferences = await SharedPreferences.getInstance();
@@ -36,6 +38,7 @@ class LibraryStore extends ChangeNotifier {
         _preferences!.getString(_themeKey), ThemeModePreference.system);
     themeColor = _enumValue(ThemeColor.values,
         _preferences!.getString(_colorKey), ThemeColor.lavender);
+    offerApkInstalls = _preferences!.getBool(_offerApkInstallsKey) ?? false;
     notifyListeners();
   }
 
@@ -103,6 +106,12 @@ class LibraryStore extends ChangeNotifier {
   Future<void> setThemeColor(ThemeColor value) async {
     themeColor = value;
     await _preferences!.setString(_colorKey, value.name);
+    notifyListeners();
+  }
+
+  Future<void> setOfferApkInstalls(bool value) async {
+    offerApkInstalls = value;
+    await _preferences!.setBool(_offerApkInstallsKey, value);
     notifyListeners();
   }
 

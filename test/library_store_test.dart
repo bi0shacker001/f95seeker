@@ -16,6 +16,7 @@ void main() {
     await first.toggleFavorite(game);
     await first.addHistory('test', SearchCategory.games, SearchField.title);
     await first.addRecentGame(game);
+    await first.setOfferApkInstalls(true);
 
     final restored = LibraryStore();
     await restored.load();
@@ -23,5 +24,6 @@ void main() {
     expect(restored.favorites.single.id, 42);
     expect(restored.history.single.query, 'test');
     expect(restored.recentGames.single.id, 42);
+    expect(restored.offerApkInstalls, isTrue);
   });
 }
