@@ -26,4 +26,26 @@ void main() {
     expect(restored.recentGames.single.id, 42);
     expect(restored.offerApkInstalls, isTrue);
   });
+
+  test('PC download queue survives reload with game and manager state', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LibraryStore();
+    await store.load();
+    store.pcDownloads.add(const PcDownload(
+      id: 'q1', game: GameSummary(id: 8, title: 'Game', creator: 'Maker'),
+      version: '1.2', url: 'https://files.example/game.zip', name: 'game.zip',
+      host: 'files.example', state: PcDownloadState.running, managerId: 25));
+    await store.savePcDownloads();
+    final restored = LibraryStore();
+    await restored.load();
+    expect(restored.pcDownloads.single.game.id, 8);
+    expect(restored.pcDownloads.single.managerId, 25);
+    expect(restored.pcDownloads.single.state, PcDownloadState.running);
+  });
+
+  test('download headers omit absent values and keep session values', () {
+    expect(buildDownloadHeaders(cookie: 'sid=secret', userAgent: 'WebView/1'),
+        {'Cookie': 'sid=secret', 'User-Agent': 'WebView/1'});
+    expect(buildDownloadHeaders(), isEmpty);
+  });
 }

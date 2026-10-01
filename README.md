@@ -16,11 +16,11 @@ Please do report issues you find. This is a semi-personal application, so follow
 - System, light, and dark appearance modes with lavender branding and six selectable accent themes.
 - An optional signed-in F95zone WebView session for protected forum and download links. Credentials are entered only on F95zone's own login page and cookies remain in Android's WebView storage.
 - Thread details from the F95Checker cache backend: version, developer, status, rating, tags, artwork, overview, changelog, and available links.
-- All forum and download links open in the external browser. Protected/XPath links open the original forum thread so the user's signed-in browser can resolve them.
+- Forum links can open in the external browser or the signed-in in-app WebView. Game download links can be resolved in that WebView and handed to Android's DownloadManager, which saves files under `Download/f95seeker` and maintains the transfer across app restarts.
 - Local response caching: searches are reused for 30 minutes and parsed game details for 12 hours. Stale cached data is used when the upstream service is temporarily unavailable.
 - An optional setting that watches APK downloads made inside f95seeker, inspects the completed package, and offers to hand it to Android's system installer. Certificate mismatches produce a warning but do not block the attempt.
 
-The app does not receive or store F95zone passwords. It has no game launcher, silent installer, root integration, Shizuku integration, or background service.
+The app does not receive or store F95zone passwords. It has no game launcher, silent installer, root integration, or Shizuku integration. PC game transfers run through Android's DownloadManager and may continue in the background.
 
 Downloaded APKs are provided by third parties. f95seeker does not verify their safety or authenticity. Review the source and requested permissions before installing. Every installation is initiated by the user and confirmed through Android's system installer.
 

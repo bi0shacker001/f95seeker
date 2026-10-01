@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +10,7 @@ import 'library_store.dart';
 import 'models.dart';
 
 const _apkInstallerChannel = MethodChannel('dev.f95seeker/apk_installer');
+const _downloadViewType = 'dev.f95seeker/download_webview';
 
 class F95FeedApp extends StatefulWidget {
   const F95FeedApp({required this.store, super.key});
@@ -27,6 +30,26 @@ class _F95FeedAppState extends State<F95FeedApp> {
       if (call.method == 'apkDownloaded' && context != null) {
         await _offerInstall(
             context, Map<String, dynamic>.from(call.arguments as Map));
+      }
+      if (call.method == 'pcDownloadReady') {
+        final raw = Map<String, dynamic>.from(call.arguments as Map);
+        final game = GameSummary(id: raw['gameId'] as int,
+            title: raw['gameTitle'] as String, creator: raw['gameCreator'] as String);
+        final args = <String, dynamic>{...raw};
+        try {
+          final managerId = await _apkInstallerChannel.invokeMethod<int>('enqueuePcDownload', args);
+          widget.store.pcDownloads.insert(0, PcDownload(
+            id: DateTime.now().microsecondsSinceEpoch.toString(), game: game,
+            version: raw['version'] as String, url: raw['url'] as String,
+            name: raw['name'] as String, host: Uri.parse(raw['url'] as String).host,
+            state: PcDownloadState.running, managerId: managerId));
+          await widget.store.savePcDownloads();
+          if (context != null && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Download started.')));
+          }
+        } on PlatformException catch (error) {
+          if (context != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message ?? 'Download could not start.')));
+        }
       }
     });
   }
@@ -139,8 +162,7 @@ class _HomePageState extends State<HomePage> {
         listenable: widget.store,
         builder: (context, _) => Scaffold(
           appBar: AppBar(
-              title:
-                  Text(['Search', 'History', 'Saved games', 'Settings'][tab])),
+              title: Text(['Search', 'History', 'Saved games', 'Downloads', 'Settings'][tab])),
           body: IndexedStack(index: tab, children: [
             SearchPage(
                 store: widget.store,
@@ -153,6 +175,7 @@ class _HomePageState extends State<HomePage> {
                       tab = 0;
                     })),
             SavedPage(store: widget.store),
+            DownloadsPage(store: widget.store),
             SettingsPage(store: widget.store),
           ]),
           bottomNavigationBar: NavigationBar(
@@ -167,6 +190,10 @@ class _HomePageState extends State<HomePage> {
                     icon: Icon(Icons.favorite_outline),
                     selectedIcon: Icon(Icons.favorite),
                     label: 'Saved'),
+                NavigationDestination(
+                    icon: Icon(Icons.download_outlined),
+                    selectedIcon: Icon(Icons.download),
+                    label: 'Downloads'),
                 NavigationDestination(
                     icon: Icon(Icons.settings_outlined),
                     selectedIcon: Icon(Icons.settings),
@@ -504,10 +531,13 @@ class _DetailPageState extends State<DetailPage> {
                             child: Text(snapshot.error.toString())));
                   }
                   final game = snapshot.requireData;
+                  final downloaded = widget.store.pcDownloads.where((d) =>
+                      d.game.id == game.summary.id &&
+                      d.state == PcDownloadState.completed);
                   return DefaultTabController(
                       length: 4,
                       child: Column(children: [
-                        _GameHeader(game: game),
+                        _GameHeader(game: game, downloadedVersion: downloaded.isEmpty ? null : downloaded.first.version),
                         const TabBar(isScrollable: true, tabs: [
                           Tab(text: 'Overview'),
                           Tab(text: 'Changelog'),
@@ -524,7 +554,7 @@ class _DetailPageState extends State<DetailPage> {
                               child: game.changelog.isEmpty
                                   ? const Text('No changelog available.')
                                   : Text(game.changelog)),
-                          _DownloadsTab(game: game, open: open),
+                          _DownloadsTab(game: game),
                           _InfoTab(
                               game: game,
                               openThread: () => open(widget.summary.threadUrl)),
@@ -535,8 +565,9 @@ class _DetailPageState extends State<DetailPage> {
 }
 
 class _GameHeader extends StatelessWidget {
-  const _GameHeader({required this.game});
+  const _GameHeader({required this.game, this.downloadedVersion});
   final GameDetail game;
+  final String? downloadedVersion;
   @override
   Widget build(BuildContext context) => Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
@@ -558,6 +589,7 @@ class _GameHeader extends StatelessWidget {
           if (game.developer.isNotEmpty) Text(game.developer),
           const SizedBox(height: 4),
           Text('Version ${game.version} · ${game.status}'),
+          if (downloadedVersion != null) Text('Downloaded $downloadedVersion'),
           if (game.score > 0) Text('★ ${game.score} (${game.votes} votes)')
         ])),
       ]));
@@ -572,9 +604,8 @@ class _TabBody extends StatelessWidget {
 }
 
 class _DownloadsTab extends StatelessWidget {
-  const _DownloadsTab({required this.game, required this.open});
+  const _DownloadsTab({required this.game});
   final GameDetail game;
-  final ValueChanged<String> open;
   @override
   Widget build(BuildContext context) => game.downloads.isEmpty
       ? const Center(
@@ -599,9 +630,13 @@ class _DownloadsTab extends StatelessWidget {
                               runSpacing: 8,
                               children: section.mirrors
                                   .map((mirror) => FilledButton.tonalIcon(
-                                        onPressed: () => open(mirror.target),
+                                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ForumBrowserPage(
+                                          initialUrl: mirror.target.startsWith('http') ? mirror.target : game.summary.threadUrl,
+                                          directUrl: mirror.target.startsWith('http') ? mirror.target : null,
+                                          xpath: mirror.target.startsWith('//') ? mirror.target : null,
+                                          offerApkInstalls: false, downloadGame: game.summary, version: game.version))),
                                         icon: const Icon(Icons.download),
-                                        label: Text(mirror.label),
+                                        label: Text('Download · ${mirror.label}'),
                                       ))
                                   .toList(),
                             ),
@@ -745,29 +780,105 @@ class SettingsPage extends StatelessWidget {
       ]);
 }
 
+class DownloadsPage extends StatefulWidget {
+  const DownloadsPage({required this.store, super.key});
+  final LibraryStore store;
+  @override
+  State<DownloadsPage> createState() => _DownloadsPageState();
+}
+
+class _DownloadsPageState extends State<DownloadsPage> {
+  Timer? _timer;
+  final Map<int, (int, DateTime)> _samples = {};
+  @override
+  void initState() { super.initState(); refresh(); _timer = Timer.periodic(const Duration(seconds: 2), (_) => refresh()); }
+  @override
+  void dispose() { _timer?.cancel(); super.dispose(); }
+  Future<void> refresh() async {
+    final ids = widget.store.pcDownloads.map((d) => d.managerId).whereType<int>().toList();
+    if (ids.isEmpty) return;
+    try {
+      final rows = await _apkInstallerChannel.invokeListMethod<Map>('queryPcDownloads', {'ids': ids});
+      for (final row in rows ?? const []) {
+        final id = (row['id'] as num).toInt();
+        final index = widget.store.pcDownloads.indexWhere((d) => d.managerId == id);
+        if (index < 0) continue;
+        final old = widget.store.pcDownloads[index];
+        final bytes = (row['downloadedBytes'] as num).toInt();
+        final now = DateTime.now();
+        final sample = _samples[id];
+        final speed = sample == null || now.difference(sample.$2).inSeconds == 0 ? 0 : ((bytes - sample.$1) / now.difference(sample.$2).inMilliseconds * 1000).round().clamp(0, 1 << 30).toInt();
+        _samples[id] = (bytes, now);
+        final state = switch ((row['status'] as num).toInt()) { 1 || 2 => PcDownloadState.running, 4 => PcDownloadState.paused, 8 => PcDownloadState.completed, 16 => PcDownloadState.failed, _ => old.state };
+        widget.store.pcDownloads[index] = old.copyWith(state: state, totalBytes: (row['totalBytes'] as num).toInt(), downloadedBytes: bytes, bytesPerSecond: speed, error: state == PcDownloadState.failed ? 'Download failed.' : null);
+      }
+      await widget.store.savePcDownloads();
+    } on PlatformException { }
+  }
+  Future<void> action(PcDownload d, String action) async {
+    if (action == 'cancel' || action == 'pause') {
+      if (d.managerId != null) await _apkInstallerChannel.invokeMethod('cancelPcDownload', {'id': d.managerId});
+      final i = widget.store.pcDownloads.indexWhere((item) => item.id == d.id);
+      if (action == 'pause') {
+        widget.store.pcDownloads[i] = d.copyWith(state: PcDownloadState.paused, error: null);
+      } else {
+        widget.store.pcDownloads.removeAt(i);
+      }
+    } else if (action == 'resume' || action == 'retry') {
+      final id = await _apkInstallerChannel.invokeMethod<int>('enqueuePcDownload', {'url': d.url, 'name': d.name});
+      final i = widget.store.pcDownloads.indexWhere((item) => item.id == d.id);
+      widget.store.pcDownloads[i] = d.copyWith(state: PcDownloadState.running, managerId: id, error: null);
+    } else if (action == 'delete') {
+      if (d.managerId != null) await _apkInstallerChannel.invokeMethod('cancelPcDownload', {'id': d.managerId});
+      widget.store.pcDownloads.removeWhere((item) => item.id == d.id);
+    } else if (action == 'open') {
+      if (d.managerId != null) await _apkInstallerChannel.invokeMethod('openPcDownload', {'id': d.managerId});
+    }
+    await widget.store.savePcDownloads();
+  }
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(listenable: widget.store, builder: (context, _) => RefreshIndicator(
+    onRefresh: refresh,
+    child: widget.store.pcDownloads.isEmpty
+      ? ListView(children: const [SizedBox(height: 180), Center(child: Text('No downloads yet. Choose Download on a game link to start.'))])
+      : ListView.builder(padding: const EdgeInsets.all(12), itemCount: widget.store.pcDownloads.length + 1, itemBuilder: (context, i) {
+        if (i == 0) return const Padding(padding: EdgeInsets.fromLTRB(4, 0, 4, 8), child: Text('Pausing stops the current transfer. Resume starts that file again from the beginning.'));
+        i -= 1;
+        final d = widget.store.pcDownloads[i];
+        final actionName = switch (d.state) { PcDownloadState.running => 'pause', PcDownloadState.paused => 'resume', PcDownloadState.failed => 'retry', _ => 'open' };
+        return Card(child: ListTile(title: Text(d.name), subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${d.game.title} · ${d.host} · ${d.state.name}'), if (d.progress != null) LinearProgressIndicator(value: d.progress), Text('${_size(d.downloadedBytes)} / ${_size(d.totalBytes)} · ${_size(d.bytesPerSecond)}/s')]), trailing: PopupMenuButton<String>(onSelected: (value) => action(d, value), itemBuilder: (_) => [PopupMenuItem(value: actionName, child: Text({'pause':'Pause','resume':'Resume','retry':'Retry','open':'Open file'}[actionName]!)), const PopupMenuItem(value: 'cancel', child: Text('Cancel')), const PopupMenuItem(value: 'delete', child: Text('Delete file'))])));
+      }),
+  ));
+  String _size(int bytes) => bytes < 0 ? '—' : bytes < 1048576 ? '${(bytes / 1024).toStringAsFixed(0)} KB' : '${(bytes / 1048576).toStringAsFixed(1)} MB';
+}
+
 class ForumBrowserPage extends StatefulWidget {
   const ForumBrowserPage(
       {required this.initialUrl,
       this.directUrl,
       this.xpath,
       this.offerApkInstalls = false,
+      this.downloadGame,
+      this.version = '',
       super.key});
   final String initialUrl;
   final String? directUrl;
   final String? xpath;
   final bool offerApkInstalls;
+  final GameSummary? downloadGame;
+  final String version;
   @override
   State<ForumBrowserPage> createState() => _ForumBrowserPageState();
 }
 
 class _ForumBrowserPageState extends State<ForumBrowserPage> {
-  late final WebViewController controller;
+  WebViewController? controller;
   var progress = 0;
   var resolved = false;
   @override
   void initState() {
     super.initState();
-    controller = WebViewController()
+    if (widget.downloadGame == null) controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
         onProgress: (value) => setState(() => progress = value),
@@ -801,18 +912,18 @@ class _ForumBrowserPageState extends State<ForumBrowserPage> {
     resolved = true;
     final encoded =
         widget.xpath!.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
-    await controller.runJavaScript(
+    await controller?.runJavaScript(
         "const n=document.evaluate('$encoded',document,null,XPathResult.FIRST_ORDERED_NODE_TYPE,null).singleNodeValue;if(n&&n.href){location.href=n.href;}");
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('F95zone'), actions: [
-          IconButton(
-              onPressed: controller.reload, icon: const Icon(Icons.refresh)),
+          if (controller != null) IconButton(
+              onPressed: controller!.reload, icon: const Icon(Icons.refresh)),
           IconButton(
               onPressed: () async {
-                final url = await controller.currentUrl();
+                final url = await controller?.currentUrl();
                 if (url != null) {
                   launchUrl(Uri.parse(url),
                       mode: LaunchMode.externalApplication);
@@ -822,7 +933,16 @@ class _ForumBrowserPageState extends State<ForumBrowserPage> {
         ]),
         body: Column(children: [
           if (progress < 100) LinearProgressIndicator(value: progress / 100),
-          Expanded(child: WebViewWidget(controller: controller))
+          Expanded(child: widget.downloadGame == null
+              ? WebViewWidget(controller: controller!)
+              : AndroidView(viewType: _downloadViewType, creationParams: {
+                  'url': widget.directUrl ?? widget.initialUrl,
+                  'xpath': widget.xpath,
+                  'gameId': widget.downloadGame!.id,
+                  'gameTitle': widget.downloadGame!.title,
+                  'gameCreator': widget.downloadGame!.creator,
+                  'version': widget.version,
+              }, creationParamsCodec: const StandardMessageCodec()))
         ]),
       );
 }

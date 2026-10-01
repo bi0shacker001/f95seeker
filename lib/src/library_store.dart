@@ -12,9 +12,11 @@ class LibraryStore extends ChangeNotifier {
   static const _themeKey = 'theme_mode_v1';
   static const _colorKey = 'theme_color_v1';
   static const _offerApkInstallsKey = 'offer_apk_installs_v1';
+  static const _pcDownloadsKey = 'pc_downloads_v1';
   final List<GameSummary> favorites = [];
   final List<SearchRecord> history = [];
   final List<GameSummary> recentGames = [];
+  final List<PcDownload> pcDownloads = [];
   SharedPreferences? _preferences;
   ThemeModePreference themeMode = ThemeModePreference.system;
   ThemeColor themeColor = ThemeColor.lavender;
@@ -34,6 +36,11 @@ class LibraryStore extends ChangeNotifier {
       ..clear()
       ..addAll(_decode(_preferences!.getString(_recentGamesKey))
           .map(GameSummary.fromJson));
+    pcDownloads
+      ..clear()
+      ..addAll(_decode(_preferences!.getString(_pcDownloadsKey)).map(PcDownload.fromJson));
+    // A process may have stopped while a transfer was active. The manager is
+    // reconciled by id when the downloads screen next opens.
     themeMode = _enumValue(ThemeModePreference.values,
         _preferences!.getString(_themeKey), ThemeModePreference.system);
     themeColor = _enumValue(ThemeColor.values,
@@ -112,6 +119,12 @@ class LibraryStore extends ChangeNotifier {
   Future<void> setOfferApkInstalls(bool value) async {
     offerApkInstalls = value;
     await _preferences!.setBool(_offerApkInstallsKey, value);
+    notifyListeners();
+  }
+
+  Future<void> savePcDownloads() async {
+    await _preferences!.setString(_pcDownloadsKey,
+        jsonEncode(pcDownloads.map((download) => download.toJson()).toList()));
     notifyListeners();
   }
 
