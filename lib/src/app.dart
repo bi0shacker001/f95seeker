@@ -813,7 +813,9 @@ class _DownloadsPageState extends State<DownloadsPage> {
         widget.store.pcDownloads[index] = old.copyWith(state: state, totalBytes: (row['totalBytes'] as num).toInt(), downloadedBytes: bytes, bytesPerSecond: speed, error: state == PcDownloadState.failed ? 'Download failed.' : null);
       }
       await widget.store.savePcDownloads();
-    } on PlatformException { }
+    } on PlatformException {
+      // The platform has no row to report yet; keep the stored state.
+    }
   }
   Future<void> action(PcDownload d, String action) async {
     if (action == 'cancel' || action == 'pause') {
@@ -878,7 +880,8 @@ class _ForumBrowserPageState extends State<ForumBrowserPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.downloadGame == null) controller = WebViewController()
+    if (widget.downloadGame == null) {
+      controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
         onProgress: (value) => setState(() => progress = value),
@@ -905,6 +908,7 @@ class _ForumBrowserPageState extends State<ForumBrowserPage> {
         },
       ))
       ..loadRequest(Uri.parse(widget.directUrl ?? widget.initialUrl));
+    }
   }
 
   Future<void> _resolveProtectedLink() async {
