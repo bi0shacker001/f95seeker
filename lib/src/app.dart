@@ -809,7 +809,7 @@ class _DownloadsPageState extends State<DownloadsPage> {
         final sample = _samples[id];
         final speed = sample == null || now.difference(sample.$2).inSeconds == 0 ? 0 : ((bytes - sample.$1) / now.difference(sample.$2).inMilliseconds * 1000).round().clamp(0, 1 << 30).toInt();
         _samples[id] = (bytes, now);
-        final state = switch ((row['status'] as num).toInt()) { 1 || 2 => PcDownloadState.running, 4 => PcDownloadState.paused, 8 => PcDownloadState.completed, 16 => PcDownloadState.failed, _ => old.state };
+        final state = switch ((row['status'] as num).toInt()) { 1 => PcDownloadState.queued, 2 => PcDownloadState.running, 4 => PcDownloadState.paused, 8 => PcDownloadState.completed, 16 => PcDownloadState.failed, _ => old.state };
         widget.store.pcDownloads[index] = old.copyWith(state: state, totalBytes: (row['totalBytes'] as num).toInt(), downloadedBytes: bytes, bytesPerSecond: speed, error: state == PcDownloadState.failed ? 'Download failed.' : null);
       }
       await widget.store.savePcDownloads();
