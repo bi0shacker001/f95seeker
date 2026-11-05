@@ -7,6 +7,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import 'f95_api.dart';
 import 'library_store.dart';
+import 'manager_pages.dart';
 import 'models.dart';
 
 const _apkInstallerChannel = MethodChannel('dev.f95seeker/apk_installer');
@@ -162,7 +163,7 @@ class _HomePageState extends State<HomePage> {
         listenable: widget.store,
         builder: (context, _) => Scaffold(
           appBar: AppBar(
-              title: Text(['Search', 'History', 'Saved games', 'Downloads', 'Settings'][tab])),
+              title: Text(['Search', 'History', 'Saved games', 'Manager', 'Downloads', 'Settings'][tab])),
           body: IndexedStack(index: tab, children: [
             SearchPage(
                 store: widget.store,
@@ -175,6 +176,7 @@ class _HomePageState extends State<HomePage> {
                       tab = 0;
                     })),
             SavedPage(store: widget.store),
+            const ManagerPage(),
             DownloadsPage(store: widget.store),
             SettingsPage(store: widget.store),
           ]),
@@ -190,6 +192,10 @@ class _HomePageState extends State<HomePage> {
                     icon: Icon(Icons.favorite_outline),
                     selectedIcon: Icon(Icons.favorite),
                     label: 'Saved'),
+                NavigationDestination(
+                    icon: Icon(Icons.library_books_outlined),
+                    selectedIcon: Icon(Icons.library_books),
+                    label: 'Manager'),
                 NavigationDestination(
                     icon: Icon(Icons.download_outlined),
                     selectedIcon: Icon(Icons.download),
@@ -512,6 +518,22 @@ class _DetailPageState extends State<DetailPage> {
       listenable: widget.store,
       builder: (context, _) => Scaffold(
             appBar: AppBar(title: Text(widget.summary.title), actions: [
+              // Manager Mode: keep this game in the local library, with the version downloaded here when there is one.
+              ListenableBuilder(
+                  listenable: manager,
+                  builder: (context, _) => IconButton(
+                      tooltip: manager.isManaged(widget.summary.id) ? 'In Manager' : 'Add to manager',
+                      onPressed: manager.isManaged(widget.summary.id)
+                          ? null
+                          : () async {
+                              final done = widget.store.pcDownloads.where((d) =>
+                                  d.game.id == widget.summary.id && d.state == PcDownloadState.completed);
+                              await manager.add(widget.summary, installedVersion: done.isEmpty ? '' : done.first.version);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to Manager.')));
+                              }
+                            },
+                      icon: Icon(manager.isManaged(widget.summary.id) ? Icons.library_add_check : Icons.library_add_outlined))),
               IconButton(
                   onPressed: () => widget.store.toggleFavorite(widget.summary),
                   icon: Icon(widget.store.isFavorite(widget.summary.id)
@@ -630,6 +652,8 @@ class _DownloadsTab extends StatelessWidget {
                               runSpacing: 8,
                               children: section.mirrors
                                   .map((mirror) => FilledButton.tonalIcon(
+                                        // Manager Mode: a long press tags the link as the game, a mod, a patch or a translation.
+                                        onLongPress: () => tagDownloadLink(context, game, section, mirror),
                                         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ForumBrowserPage(
                                           initialUrl: mirror.target.startsWith('http') ? mirror.target : game.summary.threadUrl,
                                           directUrl: mirror.target.startsWith('http') ? mirror.target : null,
